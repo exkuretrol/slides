@@ -1,0 +1,205 @@
+---
+title: "Task 2<br>Production Database"
+author: "kuaz"
+format: 
+    revealjs:
+        logo: "JEFEC.png"
+        footer: "<a href='https://github.com/exkuretrol/django-practices/tree/main/task-2-prod-db' target='_blank'>Task 2 - Production Database repo</a>"
+        chalkboard: true
+editor: visual
+---
+
+## Index
+
+::: incremental
+-   Model
+-   View
+-   ~~Test~~
+-   ~~Production Deployment~~
+-   Problems I encountered
+:::
+
+## [Image Upload Tutorial](https://learndjango.com/tutorials/django-file-and-image-uploads-tutorial)
+
+`model.py`
+
+``` python
+class Post(models.Model):
+    ...
+    cover = models.ImageField(upload_to='images/')
+```
+
+`django_project/settings.py`
+
+-   `MEDIA_ROOT` is the absolute filesystem path to the directory for user-uploaded files
+-   `MEDIA_URL` is the URL we can use in our templates for the files
+
+`template`
+
+``` html
+<img src="{{ post.cover.url}}" alt="{{ post.title }}">
+```
+
+# 
+
+<iframe class="r-stretch" src="https://www.youtube.com/embed/is3R8d420D4?si=BEc1OpStYjK5bPWO&amp;start=157" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen>
+
+</iframe>
+
+# [Django Search Tutorial](https://learndjango.com/tutorials/django-search-tutorial)
+
+Basic Filtering
+
+`views.py`
+
+``` python
+class SearchResultsView(ListView):
+    ...
+    def get_queryset(self):
+        return City.objects.filter(name__icontains='Boston')
+```
+
+-   chain filter
+-   Q objects
+
+# Model
+
+## Model
+
+`Prod`
+
+prefix `prod_`
+
+-   `no`: product numbers, primary key
+-   `name`: product names
+-   `desc`: product description
+-   `type`: product types. Type 1, Type 2, and Type 3
+-   `quantity`: product quantity
+-   `status`: product status. active or inactive?
+
+## Model {auto-animate="true"}
+
+``` python
+from django.db import models
+from django.utils.translation import gettext_lazy as _
+
+class Prod(models.Model):
+    # prod_name
+    # prod_desc
+    # prod_img
+    # prod_type
+        - T1: Type 1
+        - T2: Type 2
+        - T3: Type 3
+    # prod_quantity
+    # prod_status
+        - ACTIVE: AC
+        - INACTIVE: IN
+```
+
+## Model {.smaller auto-animate="true"}
+
+``` {.python code-line-numbers="11|12|13|2-5,14-18|19|20|7-9,21-25|27-28|30-31"}
+class Prod(models.Model):
+    class TypesInProd(models.TextChoices):
+        TYPE1 = "T1", _("Human Readable Type 1")
+        TYPE2 = "T2", _("Human Readable Type 2")
+        TYPE3 = "T3", _("Human Readable Type 3")
+
+    class StatusInProd(models.TextChoices):
+        ACTIVE = "AC", _("Active")
+        INACTIVE = "IA", _("Inactive")
+
+    prod_no = models.BigAutoField(primary_key=True)
+    prod_name = models.CharField(max_length=255)
+    prod_desc = models.TextField()
+    prod_type = models.CharField(
+        max_length=2,
+        choices=TypesInProd,
+        default=TypesInProd.TYPE1,
+    )
+    prod_img = models.ImageField(upload_to="images/") # need package piller to work properly
+    prod_quantity = models.PositiveIntegerField(default=0)
+    prod_status = models.CharField(
+        max_length=2,
+        choices=StatusInProd,
+        default=StatusInProd.ACTIVE,
+    )
+    
+    def __str__(self) -> str:
+        return self.prod_name
+
+    def get_absolute_url(self):
+        return reverse("prod_list")
+```
+
+# View
+
+## Overview {auto-animate="true"}
+
+-   ProdCreate ⬅ `CreateView`
+-   ProdListView ⬅ `ListView`
+    -   ProdSearchView ⬅ `ListView`
+    -   ProdDetailView ⬅ `DetailView`
+-   ProdUpdateView ⬅ `UpdateView`
+-   ProdDeleteView ⬅ `DeleteView`
+
+## Overview {auto-animate="true"}
+
+-   ProdCreate ⬅ `CreateView`
+-   ProdListView ⬅ `ListView`
+    -   ProdSearchView ⬅ `ListView` 🆕
+    -   ProdDetailView ⬅ `DetailView`
+-   ProdUpdateView ⬅ `UpdateView`
+-   ProdDeleteView ⬅ `DeleteView`
+
+## ProdSearchView {auto-animate="true"}
+
+``` {.python code-line-numbers="2-4|6-8"}
+class ProdSearchView(ListView):
+    model = Prod
+    context_object_name = "prods"
+    template_name = "prod_search_result.html"
+
+    def get_queryset(self) -> QuerySet[Any]:
+        ...
+        return prods_list
+```
+
+## `prod_list.html`
+
+![](search-notation.png)
+
+## ProdSearchView {auto-animate="true"}
+
+``` {.python code-line-numbers="6-7|9-22|10|11|12-21|22|24-25"}
+class ProdSearchView(ListView):
+    model = Prod
+    context_object_name = "prods"
+    template_name = "prod_search_result.html"
+
+    def get_queryset(self) -> QuerySet[Any]:
+        query = self.request.GET.get("q")
+
+        def query_by_what(query: str):
+            conds = query.split(" ")
+            filters = Q()
+            for cond in conds:
+                col, value = cond.split(":")
+                if col == "name":
+                    filters &= Q(prod_name__contains=value)
+                elif col == "desc":
+                    filters &= Q(prod_desc__contains=value)
+                elif col == "type":
+                    filters &= Q(prod_type__contains=value)
+                elif col == "status":
+                    filters &= Q(prod_status__contains=value)
+            return filters
+
+        prods_list = Prod.objects.filter(query_by_what(query))
+        return prods_list
+```
+
+## Problems I encountered
+
+-   How to implement `ListView` with `post()` method?

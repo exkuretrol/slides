@@ -1,0 +1,172 @@
+---
+title: "Task 2<br>Django `Forms` improvement"
+author: "kuaz"
+format: 
+    revealjs:
+        logo: "JEFEC.png"
+        footer: "<a href='https://github.com/exkuretrol/django-practices/tree/main/task-2-prod-db' target='_blank'>Task 2 - Production Database repo</a>"
+        chalkboard: true
+---
+
+## Index
+
+::: incremental
+-   Previous Topic: Post request in `ListView`
+-   Form Errorlist handling
+-   `LoginRequiredMixin`
+:::
+
+## Post request in `ListView` {auto-animate="true"}
+
+::: {.footer}
+`/prod/views.py`
+:::
+
+``` {.python code-line-numbers="|5|10-11"}
+class ProdListView(LoginRequiredMixin, FormMixin, ListView):
+    model = Prod
+    context_object_name = "prods"
+    template_name = "prod_list.html"
+    form_class = QueryForm
+
+    def get_queryset(self):
+        ...
+
+    def post(self, request, *args, **kwargs):
+        ...
+```
+
+## Post request in `ListView` {auto-animate="true"}
+
+::: {.footer}
+`/prod/views.py`
+:::
+
+``` {.python code-line-numbers="7-9|31-37|"}
+class ProdListView(LoginRequiredMixin, FormMixin, ListView):
+    model = Prod
+    context_object_name = "prods"
+    template_name = "prod_list.html"
+    form_class = QueryForm
+
+    def get_queryset(self):
+        query_str = self.request.POST.get("query")
+        if query_str is not None and len(query_str) is not 0:
+
+            def query_by_what(query: str):
+                conds = query.split(" ")
+                filters = Q()
+                for cond in conds:
+                    col, value = cond.split(":")
+                    if col == "name":
+                        filters &= Q(prod_name__contains=value)
+                    elif col == "desc":
+                        filters &= Q(prod_desc__contains=value)
+                    elif col == "type":
+                        filters &= Q(prod_type__contains=value)
+                    elif col == "status":
+                        filters &= Q(prod_status__contains=value)
+                return filters
+
+            prods_list = Prod.objects.filter(query_by_what(query_str))
+            return prods_list
+
+        return super().get_queryset()
+
+    def post(self, request, *args, **kwargs):
+        form = self.get_form()
+        if form.is_valid():
+            return self.get(request, *args, **kwargs)
+        else:
+            self.object_list = super().get_queryset()
+            return self.form_invalid(form)
+```
+
+## Post request in `ListView`
+
+::: {.footer}
+`/prod/forms.py`
+:::
+
+```{.python code-line-numbers="|7-16|17"}
+class QueryForm(forms.Form):
+    query = forms.CharField(
+        label="query string",
+        label_suffix="",
+        max_length=255,
+        widget=forms.TextInput,
+        validators=[
+            RegexValidator(
+                regex=r"(name:|desc:|type:|status:)",
+                message="Invalid format. It should start with 'name:', 'desc:', 'type:', or 'status:'. Do not place a space after the colon.",
+            ),
+            RegexValidator(
+                regex=r"(name:|desc:|type:|status:)[a-zA-Z0-9]+",
+                message="Invalid format. The query string after the colon should only contain alphanumeric characters or numbers.",
+            ),
+        ],
+        required=False,
+    )
+```
+
+
+# Form Errorlist handling
+
+## Form Errorlist handling {auto-animate="true"}
+
+Before
+
+```{.html code-line-numbers="|3-4"}
+<form action="" method="post">
+    {% csrf_token %}
+    <label for="id_task">Task</label>
+    {{ form.task }}
+    <input type="submit" value="Add" />
+</form>
+```
+
+## Form Errorlist handling {auto-animate="true"}
+
+After
+
+```{.html code-line-numbers="|3-7"}
+<form action="" method="post">
+    {% csrf_token %}
+    {% for field in form %}
+        {{ field.errors }}
+        <label for="{{ field.auto_id }}">{{ field.label }}</label>
+        {{ field }}
+    {% endfor %}
+    <input type="submit" value="Add" />
+</form>
+```
+
+## Form Errorlist handling {auto-animate="true"}
+
+Exception
+
+> The built-in login form doesn't display errors at an individual field level; it's a security risk to say that just the password is wrong
+
+- [LoginForm](https://reinvented-box-9cd.notion.site/Login-Form-54e8858f99f44bf28522f6b465311245?pvs=4)
+
+## `LoginRequredMixin`
+
+```{.python}
+from django.contrib.auth.mixins import LoginRequiredMixin
+
+class ProdDetailView(LoginRequiredMixin, DetailView):
+    ...
+
+class ProdListView(LoginRequiredMixin, FormMixin, ListView):
+    ...
+
+class ProdCreateView(LoginRequiredMixin, CreateView):
+    ...
+
+class ProdUpdateView(LoginRequiredMixin, UpdateView):
+    ...
+
+class ProdDeleteView(LoginRequiredMixin, DeleteView):
+    ...
+```
+
